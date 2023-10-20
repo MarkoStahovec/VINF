@@ -6,6 +6,7 @@ from utils import *
 from datetime import datetime
 
 
+# defines set of rules whether a page can be crawled parsing robots.txt file
 def can_crawl(url):
     response = requests.get(ROBOTS_URL)
     lines = response.text.split("\n")
@@ -107,7 +108,7 @@ def get_links_from_page(response):
                     resolved_link = BASE_URL + link
                 valid_links.append(resolved_link)
 
-    # Extract links from "btn btn-menu" pattern
+    # extract links from "btn btn-menu" pattern
     btn_menu_links = re.findall(r'<a class="btn btn-menu" href="([^"]+)">', response.text)
     for link in btn_menu_links:
         if not link.endswith(".html"):
@@ -127,7 +128,7 @@ def get_links_from_page(response):
             resolved_link = BASE_URL + link
         valid_links.append(resolved_link)
 
-    # Extract links from the last pattern
+    # extract links from the last pattern
     last_pattern_links = re.findall('<a href="([a-z]/[^/]+\.html)">', response.text)
     for link in last_pattern_links:
         if not link.endswith(".html"):
@@ -148,11 +149,10 @@ def get_links_from_page(response):
 
 # TODO: very primitive filtering of lyrics pages as it relies on a strict structure of hyperlinks
 def should_extract_html(url):
-    # Split the URL at ".com"
     parts = url.split('.com', 1)
     if len(parts) != 2:
         return False
-    # Count the slashes in the part after ".com"
+
     return parts[1].count('/') >= 3
 
 
@@ -174,7 +174,7 @@ def crawl():
         url = queue.pop(0)
         if url not in crawled:
             if can_crawl(url):
-                print(f"Crawling: {url}")
+                print(f"[INFO] - Crawling: {url}")
                 response = requests.get(url, headers=HEADERS)
                 content = response.content  # This gives you raw bytes
                 text = content.decode('utf-8')
@@ -189,4 +189,4 @@ def crawl():
                 crawled.append(url)
                 time.sleep(TIMEOUT)  # Sleep for 5 sec before next request
 
-    print(f"Finished Crawling! Total pages crawled: {len(crawled)}")
+    print(f"[INFO] - Finished crawling, total pages crawled: {len(crawled)}")

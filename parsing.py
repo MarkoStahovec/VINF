@@ -2,6 +2,7 @@ import csv
 import glob
 import re
 
+from tqdm import tqdm
 from utils import *
 
 
@@ -104,7 +105,7 @@ def parse():
         # Add header to TSV
         tsvfile.write("Artist\tSong_Name\tFeaturing\tAlbum_Name\tYear\tLyrics\n")
 
-        for page in pages:
+        for page in tqdm(pages, desc="Parsing pages", unit="page"):
             bold_texts = extract_bold_text(page)
             # if there are not bold texts, we are probably not on a lyrics page
             # this can be done more robustly by more regexes to find these entities, however, it might be unnecessary

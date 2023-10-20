@@ -24,4 +24,4 @@ def save_to_file(filename, data):
             f.write(data + '\n')
             f.write(PAGE_DELIMITER + '\n')  # Add the delimiter after each page
     except Exception as e:
-        print(f"Error writing to file: {e}")
+        print(f"[ERROR] - Error writing to file: {e}")

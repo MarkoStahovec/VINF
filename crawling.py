@@ -77,20 +77,20 @@ def get_links_from_page(response):
     for i, (start, end, year) in enumerate(album_patterns):
         year = int(year)
 
-        # If it's a valid year
+        # if it's a valid year
         if year >= 2022:
-            # Find the position of the current album in the response text
+            # find the position of the current album in the response text
             current_position = start
 
-            # Find the position of the next album (if it exists), otherwise look for the "other songs" pattern or the end of the text
+            # find the position of the next album (if it exists), otherwise look for the "other songs" pattern or the end of the text
             if i + 1 < len(album_patterns):
                 next_position = album_patterns[i + 1][0]
             else:
-                # If it's the last album, then extract until the "<div class="album"><b>other songs:</b></div>" pattern or the end of the text
+                # if it's the last album, then extract until the "<div class="album"><b>other songs:</b></div>" pattern or the end of the text
                 other_songs_pos = response.text.find('<div class="album"><b>other songs:</b></div>', end)
                 next_position = other_songs_pos if other_songs_pos != -1 else len(response.text)
 
-            # Extract all links between these two positions
+            # extract all links between these two positions
             segment = response.text[current_position:next_position]
             links = re.findall(r'<a[^>]* href="([^"]*)"', segment)
             for link in links:
@@ -165,9 +165,9 @@ def crawl():
 
     # queue = [BASE_URL]
     queue = []
-    queue.append("https://www.azlyrics.com/b.html")
-    # queue.append('https://www.azlyrics.com/lyrics/snohaalegra/neonpeach.html')
-    # queue.append('https://www.azlyrics.com/lyrics/blackeyedpeas/myhumps.html')
+    # queue.append("https://www.azlyrics.com/b.html")
+    queue.append('https://www.azlyrics.com/lyrics/snohaalegra/neonpeach.html')
+    queue.append('https://www.azlyrics.com/lyrics/blackeyedpeas/myhumps.html')
     crawled = []
 
     while queue and len(crawled) < MAX_PAGES:

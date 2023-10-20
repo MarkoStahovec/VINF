@@ -57,7 +57,10 @@ def extract_year(page):
         return ""
 
 
+"""
 def parse():
+    # TODO: change csv to a different format
+    # TODO: test pylucene with GPT
     list_of_files = glob.glob(f'{OUTPUT_FOLDER}*.txt')
     latest_file = max(list_of_files, key=os.path.getctime)
 
@@ -84,5 +87,40 @@ def parse():
                 lyrics = extract_lyrics(page)
 
                 csvwriter.writerow([artist, song_name, featuring, album_name, year, lyrics])
+
+    return
+"""
+
+
+def parse():
+    list_of_files = glob.glob(f'{OUTPUT_FOLDER}*.txt')
+    latest_file = max(list_of_files, key=os.path.getctime)
+
+    with open(latest_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+        pages = content.split(PAGE_DELIMITER)
+
+    with open(OUTPUT_TSV, 'w', newline='', encoding='utf-8') as tsvfile:
+        # Add header to TSV
+        tsvfile.write("Artist\tSong_Name\tFeaturing\tAlbum_Name\tYear\tLyrics\n")
+
+        for page in pages:
+            bold_texts = extract_bold_text(page)
+            # if there are not bold texts, we are probably not on a lyrics page
+            # this can be done more robustly by more regexes to find these entities, however, it might be unnecessary
+            if bold_texts:
+                artist = extract_artist(bold_texts[0])
+                song_name = bold_texts[1].strip('"').replace('"', '')
+                featuring = extract_features(page)
+                album_name = bold_texts[2].strip('"').replace('"', '')
+                year = extract_year(page)
+                lyrics = extract_lyrics(page)
+
+                # Removing or replacing any literal tab characters in the content
+                row_data = [artist, song_name, featuring, album_name, year, lyrics]
+                sanitized_data = [data.replace('\t', ' ').replace('\n', ' ') for data in
+                                  row_data]
+
+                tsvfile.write('\t'.join(sanitized_data) + "\n")
 
     return

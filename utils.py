@@ -6,7 +6,7 @@ ROBOTS_URL = BASE_URL + "robots.txt"
 USER_AGENT = "SCHOOL_PROJECT_CRAWLER: (xstahovec@stuba.sk)"
 HEADERS = {"User-Agent": USER_AGENT}
 OUTPUT_FOLDER = "./output/"
-OUTPUT_CSV = "parsed_data.csv"
+OUTPUT_TSV = "parsed_data.tsv"
 
 PAGE_DELIMITER = "#####PAGE_BREAK#####"
 MAX_PAGES = 2

@@ -87,7 +87,7 @@ def create_index(data, index_dir="index_directory"):
     writer.commit()
     writer.close()
 
-    print("[INFO] - Index created successfully.")
+    custom_print("[INFO] - Index created successfully.")
 
 
 def load_tsv(tsv_filename):
@@ -120,11 +120,11 @@ def index():
 
         # exit on an empty string
         if not search_string.strip():
-            print("[INFO] - Exiting program.")
+            custom_print("[INFO] - Exiting program.")
             exit(0)
 
         results = search_index(search_string)
-        print(f"\n[INFO] - Printing results for: \"{search_string}\".\n")
+        custom_print(f"\n[INFO] - Printing results for: \"{search_string}\".\n")
 
         for idx, song in enumerate(results, start=1):
             # featuring = f" (Featuring: {song['Featuring']})" if song['Featuring'] else ""

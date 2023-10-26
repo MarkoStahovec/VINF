@@ -1,9 +1,16 @@
+import glob
+import random
+
 import requests
 import re
 import time
 
 from utils import *
 from datetime import datetime
+
+
+class CaptchaDetectedException(Exception):
+    pass
 
 
 # defines set of rules whether a page can be crawled parsing robots.txt file
@@ -33,34 +40,6 @@ def can_crawl(url):
             allowed = False
 
     return allowed
-
-
-"""
-def get_links_from_page(response):
-    links = re.findall('<a[^>]* href="([^"]*)"', response.text)
-
-    # resolve relative URLs and URLs starting with //
-    resolved_links = []
-    for link in links:
-
-        # skip all links that lead elsewhere than to our domain
-        if BASE_DOMAIN not in link:
-            continue
-
-        # skip all links that may not end up with html as those are not useful
-        if not link.endswith(".html"):
-            continue
-
-        if link.startswith("//"):
-            resolved_link = "https:" + link
-        elif link.startswith("http"):
-            resolved_link = link
-        else:
-            resolved_link = BASE_URL + link
-        resolved_links.append(resolved_link)
-
-    return resolved_links
-"""
 
 
 def get_links_from_page(response):
@@ -128,7 +107,7 @@ def get_links_from_page(response):
             resolved_link = BASE_URL + link
         valid_links.append(resolved_link)
 
-    # extract links from the last pattern
+    # extract links that lead to artists profiles
     last_pattern_links = re.findall('<a href="([a-z]/[^/]+\.html)">', response.text)
     for link in last_pattern_links:
         if not link.endswith(".html"):
@@ -156,6 +135,124 @@ def should_extract_html(url):
     return parts[1].count('/') >= 3
 
 
+def is_captcha_page(content):
+    lowercased_content = content.lower()
+    for keyword in ["captcha", "recaptcha", "challenge", "captch"]:
+        if keyword in lowercased_content:
+            return True
+    return False
+
+
+def get_random_user_agent():
+    return random.choice(USER_AGENTS)
+
+
+def crawl():
+    while True:
+        try:
+            hours = int(input("[INPUT] - Enter a number of hours to crawl: "))
+            # hours = 1
+            if 1 <= hours <= 24:
+                break
+        except ValueError:
+            print("")
+
+    start_time = time.time()
+    duration = hours * 60 * 60
+
+    # check if the user wants to load from checkpoint
+    # the method loads the newest txt file and continues adding to that, which relies heavily on the fact that no txt
+    # files are added to the folder
+    choice = input("[INPUT] - Do you want to load the last checkpoint? [y/n]: ")
+    # choice = "y"
+    if choice.lower().replace(" ", "") == "y":
+        queue, crawled = load_state()
+        list_of_files = glob.glob(f'{OUTPUT_FOLDER}*.txt')
+        latest_file = max(list_of_files, key=os.path.getctime)
+        filename = latest_file
+    else:
+        queue = [BASE_URL]
+        crawled = []
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        filename = f"./output/crawled_data_{timestamp}.txt"
+        if os.path.exists(filename):  # ensure the file doesn't exist before we create it
+            os.remove(filename)
+
+    batch = []  # holds a batch of pages so that we save by batches, not after every page
+
+    try:
+        while queue and len(crawled) < MAX_PAGES and time.time() - start_time < duration:
+            url = queue.pop(0)
+            if url not in crawled:
+                if can_crawl(url):
+                    custom_crawl_print(f"[INFO] - Crawling: {url}", queue, crawled)
+
+                    headers = {
+                        "User-Agent": get_random_user_agent(),
+                        "From": "xstahovec@stuba.sk"  # Your contact email
+                    }
+                    response = requests.get(url, headers=headers)
+
+                    # special treatment for special cases
+                    if response.status_code in [403, 429]:
+                        custom_crawl_print(f"[WARNING] - Received status {response.status_code}. Sleeping for {LONG_TIMEOUT}s before next request.", queue, crawled)
+                        queue.append(url)  # adding url to the end of the queue so we can try the link later
+                        raise CaptchaDetectedException("Captcha detected")
+
+                    elif response.status_code in [401, 404, 406, 409, 411]:
+                        custom_crawl_print(
+                            f"[WARNING] - Received status {response.status_code}. Sleeping for {TIMEOUT}s before next request.",
+                            queue, crawled)
+                        time.sleep(TIMEOUT)
+                        continue
+
+                    content = response.content  # raw bytes
+                    text = content.decode('utf-8')
+
+                    if is_captcha_page(text):
+                        custom_crawl_print(
+                            "[WARNING] - Captcha detected. Raising an exception to trigger error handling.", queue,
+                            crawled)
+                        queue.append(url)  # Re-add the URL to the queue to retry later
+                        raise CaptchaDetectedException("Captcha detected")
+
+                    # TODO: enable this for final version
+                    if should_extract_html(url):
+                        custom_crawl_print(f"[INFO] - Saving content from: {url}", queue, crawled)
+                        batch.append(text)
+
+                    # genius logic to return only those links that are not in queue nor in crawled
+                    # current url may be added to queue anyway, but it is not let through in the if url not in crawled
+                    links = set(get_links_from_page(response)) - set(queue) - set(crawled)
+                    queue.extend(links)
+                    crawled.append(url)
+
+                    if len(batch) == BATCH_SIZE:
+                        combined_batch = PAGE_DELIMITER.join(batch)
+                        save_to_file(filename, combined_batch)  # save the batch of raw HTML
+                        save_state(queue, crawled)  # save the state of queue and already crawled pages
+                        batch.clear()  # empty out the batch
+                        custom_crawl_print(f"[INFO] - Saving current batch and writing to file successfully.", queue, crawled)
+
+                    random_delay = random.uniform(0, 5)
+                    sleep_duration = TIMEOUT + random_delay
+
+                    time.sleep(sleep_duration)
+
+    except CaptchaDetectedException as e:
+        custom_crawl_print(f"[CAPTCHA] - Captcha was detected: {e}", queue, crawled)
+    except Exception as e:
+        custom_crawl_print(f"[ERROR] - An error occurred while crawling: {e}", queue, crawled)
+
+    finally:
+        combined_batch = PAGE_DELIMITER.join(batch)
+        save_to_file(filename, combined_batch)  # save the batch of raw HTML
+        save_state(queue, crawled)  # save the state of queue and already crawled pages
+
+    custom_crawl_print(f"[INFO] - Finished crawling, total pages crawled: {len(crawled)}", queue, crawled)
+
+
+"""
 def crawl():
     # Create a new file for this crawl session
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')  # current date and time
@@ -165,7 +262,6 @@ def crawl():
 
     # queue = [BASE_URL]
     queue = []
-    # queue.append("https://www.azlyrics.com/b.html")
     queue.append('https://www.azlyrics.com/lyrics/snohaalegra/neonpeach.html')
     queue.append('https://www.azlyrics.com/lyrics/blackeyedpeas/myhumps.html')
     crawled = []
@@ -190,3 +286,4 @@ def crawl():
                 time.sleep(TIMEOUT)  # Sleep for 5 sec before next request
 
     print(f"[INFO] - Finished crawling, total pages crawled: {len(crawled)}")
+"""

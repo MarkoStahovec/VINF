@@ -1,3 +1,5 @@
+import re
+
 import lucene
 import csv
 import os
@@ -7,8 +9,8 @@ from org.apache.lucene.document import Document, Field, StringField, TextField
 from org.apache.lucene.index import IndexWriter, IndexWriterConfig
 from org.apache.lucene.store import MMapDirectory, NIOFSDirectory
 from java.nio.file import Paths
-from org.apache.lucene.search import IndexSearcher
-from org.apache.lucene.index import DirectoryReader
+from org.apache.lucene.search import IndexSearcher, FuzzyQuery
+from org.apache.lucene.index import DirectoryReader, Term
 from org.apache.lucene.queryparser.classic import QueryParser
 
 from org.apache.lucene.analysis.core import LowerCaseFilter, WhitespaceTokenizer
@@ -35,17 +37,31 @@ class CustomAnalyzer(PythonAnalyzer):
         return self.TokenStreamComponents(source, filter2)
 
 
-# check the index_directory
 def search_index(query_str, index_dir="index_directory"):
     directory = MMapDirectory(Paths.get(index_dir))
     reader = DirectoryReader.open(directory)
     searcher = IndexSearcher(reader)
-
-    # TODO: this needs to be changed, we dont want to remove stop words
     analyzer = CustomAnalyzer()
-    query = QueryParser("Lyrics", analyzer).parse(query_str)
 
+    # enforce phrase search
+    if not (query_str.startswith('"') and query_str.endswith('"')):
+        query_str = f'"{query_str}"'
+    query = QueryParser("Lyrics", analyzer).parse(query_str)
     hits = searcher.search(query, 10).scoreDocs
+
+    # fallback to individual word search
+    if len(hits) < 10:
+        query_str = query_str.strip('"')
+        query = QueryParser("Lyrics", analyzer).parse(query_str)
+        hits += searcher.search(query, 10 - len(hits)).scoreDocs
+
+    # fallback to Fuzzy Search
+    if len(hits) < 10:
+        terms = query_str.split()  # splitting the query into individual terms for fuzzy search
+        for term in terms:
+            fuzzy_query = FuzzyQuery(Term("Lyrics", term), 2)  # fuzziness level set to 2
+            fuzzy_hits = searcher.search(fuzzy_query, 10 - len(hits)).scoreDocs
+            hits += fuzzy_hits
 
     results = []
     for hit in hits:
@@ -105,6 +121,13 @@ def settings(data):
         create_index(data)
 
 
+def sanitize_query(query):
+    special_chars_pattern = re.compile('[^a-zA-Z0-9\\s]')
+    # replace special characters with a space
+    sanitized_query = special_chars_pattern.sub(' ', query)
+    return sanitized_query
+
+
 def index():
     # TODO: needs to be called only once
     lucene.initVM(vmargs=['-Djava.awt.headless=true', '-Xmx2g'])
@@ -123,8 +146,9 @@ def index():
             custom_print("[INFO] - Exiting program.")
             exit(0)
 
-        results = search_index(search_string)
-        custom_print(f"\n[INFO] - Printing results for: \"{search_string}\".\n")
+        sanitized_search_string = sanitize_query(search_string)
+        results = search_index(sanitized_search_string)
+        custom_print(f"\n[INFO] - Printing results for: \"{sanitized_search_string}\".\n")
 
         for idx, song in enumerate(results, start=1):
             # featuring = f" (Featuring: {song['Featuring']})" if song['Featuring'] else ""

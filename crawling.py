@@ -182,21 +182,22 @@ def crawl():
 
     try:
         while queue and len(crawled) < MAX_PAGES and time.time() - start_time < duration:
-            url = queue.pop(0)
+            url = queue.pop()
             if url not in crawled:
                 if can_crawl(url):
                     custom_crawl_print(f"[INFO] - Crawling: {url}", queue, crawled)
 
                     headers = {
                         "User-Agent": get_random_user_agent(),
-                        "From": "xstahovec@stuba.sk"  # Your contact email
+                        "From": "xstahovec@stuba.sk"
                     }
                     response = requests.get(url, headers=headers)
 
                     # special treatment for special cases
                     if response.status_code in [403, 429]:
                         custom_crawl_print(f"[WARNING] - Received status {response.status_code}. Sleeping for {LONG_TIMEOUT}s before next request.", queue, crawled)
-                        queue.append(url)  # adding url to the end of the queue so we can try the link later
+                        queue.insert(0, url)
+                        # queue.append(url)  # adding url to the end of the queue so we can try the link later
                         raise CaptchaDetectedException("Captcha detected")
 
                     elif response.status_code in [401, 404, 406, 409, 411]:
@@ -211,10 +212,12 @@ def crawl():
 
                     if is_captcha_page(text):
                         custom_crawl_print(
-                            "[WARNING] - Captcha detected. Raising an exception to trigger error handling.", queue,
+                            f"[WARNING] - Captcha detected. Sleeping for {LONG_TIMEOUT}s before next request.", queue,
                             crawled)
-                        queue.append(url)  # Re-add the URL to the queue to retry later
-                        raise CaptchaDetectedException("Captcha detected")
+                        queue.insert(0, url)
+                        # queue.append(url)  # re-add the URL to the queue to retry later
+                        time.sleep(LONG_TIMEOUT)
+                        continue
 
                     # TODO: enable this for final version
                     if should_extract_html(url):
@@ -225,6 +228,7 @@ def crawl():
                     # current url may be added to queue anyway, but it is not let through in the if url not in crawled
                     links = set(get_links_from_page(response)) - set(queue) - set(crawled)
                     queue.extend(links)
+                    random.shuffle(queue)
                     crawled.append(url)
 
                     if len(batch) == BATCH_SIZE:

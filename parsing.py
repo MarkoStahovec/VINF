@@ -109,7 +109,7 @@ def parse():
             bold_texts = extract_bold_text(page)
             # if there are not bold texts, we are probably not on a lyrics page
             # this can be done more robustly by more regexes to find these entities, however, it might be unnecessary
-            if bold_texts:
+            if len(bold_texts) >= 3:
                 artist = extract_artist(bold_texts[0])
                 song_name = bold_texts[1].strip('"').replace('"', '')
                 featuring = extract_features(page)
